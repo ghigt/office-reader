@@ -34,6 +34,39 @@ func readFileFromZip(r *zip.ReadCloser, name string) ([]byte, error) {
 	return nil, nil
 }
 
+type ContentTypes struct {
+	Overrides []ContentTypeOverride `xml:"Override"`
+}
+
+type ContentTypeOverride struct {
+	PartName    string `xml:"PartName,attr"`
+	ContentType string `xml:"ContentType,attr"`
+}
+
+// findMainDocumentPath reads [Content_Types].xml and returns the path of the
+// main wordprocessingml document part (e.g. "word/document.xml" or "word/document2.xml").
+func findMainDocumentPath(r *zip.ReadCloser) (string, error) {
+	data, err := readFileFromZip(r, "[Content_Types].xml")
+	if err != nil {
+		return "", err
+	}
+	if data == nil {
+		return "", fmt.Errorf("[Content_Types].xml not found")
+	}
+
+	var ct ContentTypes
+	if err := xml.Unmarshal(data, &ct); err != nil {
+		return "", fmt.Errorf("content types parsing error: %w", err)
+	}
+
+	for _, o := range ct.Overrides {
+		if strings.Contains(o.ContentType, "wordprocessingml.document.main") {
+			return strings.TrimPrefix(o.PartName, "/"), nil
+		}
+	}
+	return "", fmt.Errorf("main document part not found in [Content_Types].xml")
+}
+
 // readRelsFromZip parses a .rels file and returns a map of Id→Target
 // for relationships whose Type ends with the given suffix (e.g. "hyperlink").
 func readRelsFromZip(r *zip.ReadCloser, relsPath, typeSuffix string) (map[string]string, error) {

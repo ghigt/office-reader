@@ -146,17 +146,27 @@ func readDocx(path string) ([]string, error) {
 	}
 	defer r.Close()
 
-	rels, err := readRelsFromZip(r, "word/_rels/document.xml.rels", "hyperlink")
+	docPath, err := findMainDocumentPath(r)
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := readFileFromZip(r, "word/document.xml")
+	// Derive the rels path from the document path (e.g. "word/document2.xml" → "word/_rels/document2.xml.rels")
+	lastSlash := strings.LastIndex(docPath, "/")
+	dir, file := docPath[:lastSlash+1], docPath[lastSlash+1:]
+	relsPath := dir + "_rels/" + file + ".rels"
+
+	rels, err := readRelsFromZip(r, relsPath, "hyperlink")
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := readFileFromZip(r, docPath)
 	if err != nil {
 		return nil, err
 	}
 	if data == nil {
-		return nil, fmt.Errorf("document.xml not found")
+		return nil, fmt.Errorf("%s not found", docPath)
 	}
 
 	var doc Document
